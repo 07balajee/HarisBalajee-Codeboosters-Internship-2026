@@ -1,0 +1,1303 @@
+{
+  "cells": [
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "K3DLkrj2d4vz"
+      },
+      "outputs": [],
+      "source": [
+        "!pip install chromadb sentence-transformers -q"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "cK2T0lgKgF37",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "937018ac-8b29-4b1f-deda-8fceadf45a35"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "All libraries imported successfully\n",
+            "ChromaDB version: 1.5.9\n"
+          ]
+        }
+      ],
+      "source": [
+        "import pandas as pd\n",
+        "import numpy as np\n",
+        "\n",
+        "from sentence_transformers import SentenceTransformer\n",
+        "import chromadb\n",
+        "print(\"All libraries imported successfully\")\n",
+        "print(f\"ChromaDB version: {chromadb.__version__}\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "iyC1ult2gr2V",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "086f2cad-6558-4839-c729-946d83b0d5b1"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "============================================================\n",
+            "KEYWORD SEARCHED for: vehicle\n",
+            "============================================================\n",
+            "  MISSED [doc_0]:ETL is used to clean and transform data\n",
+            "  FOUND  [doc_1]: A vehicle is a mode of transportation\n",
+            "  MISSED [doc_2]:Cars and trucks are popular automobiles\n",
+            "  MISSED [doc_3]:SQL is used to query database\n",
+            "  MISSED [doc_4]:Machine learning trains models on data\n",
+            "\n",
+            "PROBLEM: doc_2 talks about 'Cars and trucks' - which ARE vehicles!\n",
+            "But keyword search MISSED it because it searched for the text exact word 'vehicle'.\n"
+          ]
+        }
+      ],
+      "source": [
+        "documents=[\n",
+        "    \"ETL is used to clean and transform data\",\n",
+        "    \"A vehicle is a mode of transportation\",\n",
+        "    \"Cars and trucks are popular automobiles\",\n",
+        "    \"SQL is used to query database\",\n",
+        "    \"Machine learning trains models on data\",\n",
+        "]\n",
+        "query_keyword='vehicle'\n",
+        "print('='*60)\n",
+        "print(f'KEYWORD SEARCHED for: {query_keyword}')\n",
+        "print(\"=\"*60)\n",
+        "for i,doc in enumerate(documents):\n",
+        "  if query_keyword.lower() in doc.lower():\n",
+        "    print(f\"  FOUND  [doc_{i}]: {doc}\")\n",
+        "  else:\n",
+        "    print(f\"  MISSED [doc_{i}]:{doc}\")\n",
+        "print()\n",
+        "print(\"PROBLEM: doc_2 talks about 'Cars and trucks' - which ARE vehicles!\")\n",
+        "print(\"But keyword search MISSED it because it searched for the text exact word 'vehicle'.\")\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "Ahp8W-HBlnWx",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "c3d16f2d-e4af-4f04-cd64-84a85953c9c4"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "KEYWORD SEARCH FAILURE CASES\n",
+            "============================================================\n",
+            "Query: 'I feel sick'\n",
+            "Misses: 'Iam unwell, patient has fever'\n",
+            "----------------------------------------\n",
+            "Query: 'How to cook rice'\n",
+            "Misses: 'Steps to prepare rice'\n",
+            "----------------------------------------\n",
+            "Query: 'vehicle speed'\n",
+            "Misses: 'car acceleration,automobile velocity'\n",
+            "----------------------------------------\n",
+            "Query: 'ML model accuracy'\n",
+            "Misses: 'classification performance, prediction quality'\n",
+            "----------------------------------------\n",
+            "\n",
+            "SOLUTION: We need search that understands MEANING, not just characters.\n",
+            "That is what EMBEDDINGS do.\n"
+          ]
+        }
+      ],
+      "source": [
+        "failure_examples = [\n",
+        "    {\"query\":\"I feel sick\",  \"misses\":\"Iam unwell, patient has fever\"},\n",
+        "    {\"query\":\"How to cook rice\",  \"misses\":\"Steps to prepare rice\"},\n",
+        "    {\"query\":\"vehicle speed\",  \"misses\":\"car acceleration,automobile velocity\"},\n",
+        "    {\"query\":\"ML model accuracy\", \"misses\":\"classification performance, prediction quality\"},\n",
+        "]\n",
+        "print(\"KEYWORD SEARCH FAILURE CASES\")\n",
+        "print(\"=\"*60)\n",
+        "for ex in failure_examples:\n",
+        "  print(f\"Query: '{ex['query']}'\")\n",
+        "  print(f\"Misses: '{ex['misses']}'\")\n",
+        "  print(\"-\"*40)\n",
+        "print()\n",
+        "print(\"SOLUTION: We need search that understands MEANING, not just characters.\")\n",
+        "print(\"That is what EMBEDDINGS do.\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 268,
+          "referenced_widgets": [
+            "d5fb449fecdf4a6dac16b9d81d512ac7",
+            "d4ed2b9243e742b48e8ec7b4a2262cae",
+            "2f27cc21927144328c7deacdba1c46d4",
+            "c4dc723820ed41c7af85333548d2f315",
+            "34707060b53244d099564e69a9d3d2ed",
+            "01d8c37964c34ea7b8a009475d923220",
+            "346c4cc3d8ec40ee92836908fe3def97",
+            "5fcf39de61f54c93a5bb43b4d1f0209c",
+            "2138b19ae1d549409965ae6e55a93d92",
+            "528ae5488362421d938db18188306f9d",
+            "0d02723ce256447eb5a1d86be9f03953"
+          ]
+        },
+        "id": "0Map0C4JoPuP",
+        "outputId": "812751c8-3d64-494c-a8cb-eaefa800876b"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Loading embedding model... (may take 1-2 minutes on forst run)\n"
+          ]
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "d5fb449fecdf4a6dac16b9d81d512ac7"
+            }
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "BertModel LOAD REPORT from: sentence-transformers/all-MiniLM-L6-v2\n",
+            "Key                     | Status     |  | \n",
+            "------------------------+------------+--+-\n",
+            "embeddings.position_ids | UNEXPECTED |  | \n",
+            "\n",
+            "Notes:\n",
+            "- UNEXPECTED\t:can be ignored when loading from different task/architecture; not ok if you expect identical arch.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Embedding model loaded successfully\n",
+            "Model produces vectors of size: 384 dimensions\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "/tmp/ipykernel_1795/3607652020.py:4: FutureWarning: The `get_sentence_embedding_dimension` method has been renamed to `get_embedding_dimension`.\n",
+            "  print(f\"Model produces vectors of size: {model.get_sentence_embedding_dimension()} dimensions\")\n"
+          ]
+        }
+      ],
+      "source": [
+        "print(\"Loading embedding model... (may take 1-2 minutes on forst run)\")\n",
+        "model =SentenceTransformer('all-MiniLM-L6-v2')\n",
+        "print(\"Embedding model loaded successfully\")\n",
+        "print(f\"Model produces vectors of size: {model.get_sentence_embedding_dimension()} dimensions\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "zQFQmWnsquUq",
+        "outputId": "112a0fa4-8745-420a-983d-dd7b487825b7"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Input sentence: 'ETL is used to clean and transform data'\n",
+            "\n",
+            "Embedding type:<class 'numpy.ndarray'>\n",
+            "Embedding shape:(384,)\n",
+            "First 10 numbers: [-0.0784  0.0541  0.0224 -0.0389  0.0221 -0.0904  0.0007 -0.0152  0.0733\n",
+            "  0.0362]\n",
+            "Min value: -0.1381\n",
+            "Max value: 0.1815\n"
+          ]
+        }
+      ],
+      "source": [
+        "sentence = \"ETL is used to clean and transform data\"\n",
+        "embedding=model.encode(sentence)\n",
+        "print(f\"Input sentence: '{sentence}'\")\n",
+        "print()\n",
+        "print(f\"Embedding type:{type(embedding)}\")\n",
+        "print(f\"Embedding shape:{embedding.shape}\")\n",
+        "print(f\"First 10 numbers: {embedding[:10].round(4)}\")\n",
+        "print(f\"Min value: {embedding.min():.4f}\")\n",
+        "print(f\"Max value: {embedding.max():.4f}\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "T-DHT1Vmr8O_",
+        "outputId": "439bae69-543a-4f72-80bb-39ad21548b31"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Number of sentences: 3\n",
+            "Shape of embeddings array: (3, 384)\n",
+            "\n",
+            "Each row is one sentence's embedding:\n",
+            "  Sentence 0: shape=(384,), first 5 values=[-0.078  0.054  0.022 -0.039  0.022]\n",
+            "  Sentence 1: shape=(384,), first 5 values=[-0.052  0.029 -0.004 -0.02  -0.063]\n",
+            "  Sentence 2: shape=(384,), first 5 values=[0.054 0.06  0.075 0.049 0.05 ]\n"
+          ]
+        }
+      ],
+      "source": [
+        "sentences=[\n",
+        "    \"ETL is used to clean and transform data\",\n",
+        "    \"Data tranformation is a key pipeline step\",\n",
+        "    \"The sky is blue and clouds are white\",\n",
+        "]\n",
+        "embeddings=model.encode(sentences)\n",
+        "print(f\"Number of sentences: {len(sentences)}\")\n",
+        "print(f\"Shape of embeddings array: {embeddings.shape}\")\n",
+        "print()\n",
+        "print(\"Each row is one sentence's embedding:\")\n",
+        "for i,sent in enumerate(sentences):\n",
+        "  print(f\"  Sentence {i}: shape={embeddings[i].shape}, first 5 values={embeddings[i][:5].round(3)}\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "nPAjPdvevF88",
+        "outputId": "ad299c29-1628-4122-e3b4-37ec8f3770dc"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "COSINE SIMILARITY SCORES\n",
+            "============================================================\n",
+            "Sentence 0: ETL is used to clean and transform data\n",
+            "Sentence 1: Data tranformation is a key pipeline step\n",
+            "Sentence 2: The sky is blue and clouds are white\n",
+            "\n",
+            "Similarity (0 vs 1):0.4660 <- Expected: HIGH (same topic)\n",
+            "Similarity (0 vs 2):0.4660 <- Expected: LOW (different topic)\n",
+            "Similarity (1 vs 2):0.4660 <- Expected: LOW (different topic)\n",
+            "\n",
+            "INSIGHT: Sentences 0 and 1 have different words but similar meaning.\n",
+            "Their cosne similarity score is high - the embedding captured the meaning\n"
+          ]
+        }
+      ],
+      "source": [
+        "def cosine_similarity(vec_a,vec_b):\n",
+        "  dot_product=np.dot(vec_a,vec_b)\n",
+        "  norm_a=np.linalg.norm(vec_a)\n",
+        "  norm_b=np.linalg.norm(vec_b)\n",
+        "  return dot_product/(norm_a*norm_b)\n",
+        "sim_01 = cosine_similarity(embeddings[0],embeddings[1])\n",
+        "sim_02 = cosine_similarity(embeddings[0],embeddings[2])\n",
+        "sim_03 = cosine_similarity(embeddings[1],embeddings[2])\n",
+        "\n",
+        "print(\"COSINE SIMILARITY SCORES\")\n",
+        "print(\"=\"*60)\n",
+        "print(f\"Sentence 0: {sentences[0]}\")\n",
+        "print(f\"Sentence 1: {sentences[1]}\")\n",
+        "print(f\"Sentence 2: {sentences[2]}\")\n",
+        "print()\n",
+        "print(f\"Similarity (0 vs 1):{sim_01:.4f} <- Expected: HIGH (same topic)\")\n",
+        "print(f\"Similarity (0 vs 2):{sim_01:.4f} <- Expected: LOW (different topic)\")\n",
+        "print(f\"Similarity (1 vs 2):{sim_01:.4f} <- Expected: LOW (different topic)\")\n",
+        "print()\n",
+        "print(\"INSIGHT: Sentences 0 and 1 have different words but similar meaning.\")\n",
+        "print(\"Their cosne similarity score is high - the embedding captured the meaning\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "8FgyUsPp2XOH",
+        "outputId": "247d81f8-6360-412f-92c5-528f35713bc6"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "COSINE SIMILARITY SCORES\n",
+            "============================================================\n",
+            "Sentence 0: Machine learning trains model on labeled data\n",
+            "Sentence 1: AI algorithms learn patterns from example\n",
+            "Sentence 2: I enjoy eating pizza for lunch\n",
+            "\n",
+            "Similarity (A vs B):0.3139\n",
+            "Similarity (A vs B):-0.0477\n",
+            "Similarity (B vs C):0.0136\n",
+            "\n",
+            "Correct: A and B are more similar to each other that A and C\n"
+          ]
+        }
+      ],
+      "source": [
+        "your_sentences=[\n",
+        "    \"Machine learning trains model on labeled data\",\n",
+        "    \"AI algorithms learn patterns from example\",\n",
+        "    \"I enjoy eating pizza for lunch\"\n",
+        "]\n",
+        "your_embeddings=model.encode(your_sentences)\n",
+        "sim_your_01=cosine_similarity(your_embeddings[0],your_embeddings[1])\n",
+        "sim_your_02=cosine_similarity(your_embeddings[0],your_embeddings[2])\n",
+        "sim_your_12=cosine_similarity(your_embeddings[1],your_embeddings[2])\n",
+        "\n",
+        "\n",
+        "print(\"COSINE SIMILARITY SCORES\")\n",
+        "print(\"=\"*60)\n",
+        "print(f\"Sentence 0: {your_sentences[0]}\")\n",
+        "print(f\"Sentence 1: {your_sentences[1]}\")\n",
+        "print(f\"Sentence 2: {your_sentences[2]}\")\n",
+        "print()\n",
+        "print(f\"Similarity (A vs B):{sim_your_01:.4f}\")\n",
+        "print(f\"Similarity (A vs B):{sim_your_02:.4f}\")\n",
+        "print(f\"Similarity (B vs C):{sim_your_12:.4f}\")\n",
+        "print()\n",
+        "if sim_your_01 > sim_your_02:\n",
+        "  print(\"Correct: A and B are more similar to each other that A and C\")\n",
+        "else:\n",
+        "  print(\"Incorrect: A and C are more similar to each other that A and B\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "uN3qTphuAq9Y",
+        "outputId": "392228a7-5b69-43d7-b27c-a91756c132ce"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "ChromaDB client created (in-memory mode)\n",
+            "Collection name: demo_notes\n",
+            "Documents in collection: 5\n"
+          ]
+        }
+      ],
+      "source": [
+        "chroma_client=chromadb.Client()\n",
+        "collection=chroma_client.get_or_create_collection(\"demo_notes\")\n",
+        "print(\"ChromaDB client created (in-memory mode)\")\n",
+        "print(f\"Collection name: demo_notes\")\n",
+        "print(f\"Documents in collection: {collection.count()}\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "JoxWxmJCFqMe",
+        "outputId": "740858d8-3cff-422a-ae87-7819925004c5"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Documents added to collection!\n",
+            "Total documents now in collection: 5\n"
+          ]
+        }
+      ],
+      "source": [
+        "sample_docs=[\n",
+        "    \"ETL stands for Extract Transform Load - the core data engineering process\",\n",
+        "    \"SQL SELECT statements retrieve data from database tables\",\n",
+        "    \"Machine learning models learn patterns from training data\",\n",
+        "    \"Python Pandas library is used for data manipulation and cleaning\",\n",
+        "    \"Neural networks are inspired by how the human brain works\",\n",
+        "]\n",
+        "sample_ids=['doc001','doc002','doc003','doc004','doc005']\n",
+        "sample_metadata=[\n",
+        "    {\"subject\":\"Data Engineering\",\"topic\":\"ETL\"},\n",
+        "    {\"subject\":\"Data Engineering\",\"topic\":\"SQL\"},\n",
+        "    {\"subject\":\"Machine Learning\",\"topic\":\"ML Basics\"},\n",
+        "    {\"subject\":\"Python\",\"topic\":\"Pandas\"},\n",
+        "    {\"subject\":\"Machine Learning\",\"topic\":\"Neural Networks\"},\n",
+        "]\n",
+        "collection.add(\n",
+        "    documents=sample_docs,\n",
+        "    ids=sample_ids,\n",
+        "    metadatas=sample_metadata\n",
+        ")\n",
+        "print(f\"Documents added to collection!\")\n",
+        "print(f\"Total documents now in collection: {collection.count()}\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "8bYcCto3KuwZ",
+        "outputId": "515d3e08-de82-4637-d8e9-b91afff66665"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "RESULT KEYS AVAILABLE:\n",
+            "['ids', 'embeddings', 'documents', 'uris', 'included', 'data', 'metadatas', 'distances']\n"
+          ]
+        }
+      ],
+      "source": [
+        "query=\"How do I clean and prepare data?\"\n",
+        "results=collection.query(\n",
+        "    query_texts=[query],\n",
+        "    n_results=3\n",
+        ")\n",
+        "print(\"RESULT KEYS AVAILABLE:\")\n",
+        "print(list(results.keys()))"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "-3ZVO4BqL1wq",
+        "outputId": "10873a8e-d45c-4313-aa9e-e02e463eab53"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Query: 'How do I clean and prepare data?'\n",
+            "============================================================\n",
+            "\n",
+            "Rank 0 | ID: doc004 | Distance: 1.1045\n",
+            " Subject: Python | Topic: Pandas\n",
+            " Document: Python Pandas library is used for data manipulation and cleaning\n",
+            "\n",
+            "Rank 1 | ID: doc002 | Distance: 1.6139\n",
+            " Subject: Data Engineering | Topic: SQL\n",
+            " Document: SQL SELECT statements retrieve data from database tables\n",
+            "\n",
+            "Rank 2 | ID: doc003 | Distance: 1.6540\n",
+            " Subject: Machine Learning | Topic: ML Basics\n",
+            " Document: Machine learning models learn patterns from training data\n",
+            "\n",
+            "NOTICE: The result are about ETL and Pandas - exactly what 'clean and prepare data' means!\n",
+            "Sematic search found them even though the words are different.\n"
+          ]
+        }
+      ],
+      "source": [
+        "print(f\"Query: '{query}'\")\n",
+        "print(\"=\"*60)\n",
+        "print()\n",
+        "matched_docs=results['documents'][0]\n",
+        "matched_ids=results['ids'][0]\n",
+        "matched_distance=results['distances'][0]\n",
+        "matched_metadata=results['metadatas'][0]\n",
+        "\n",
+        "for rank,(doc,doc_id,dist,meta) in enumerate(zip(matched_docs,matched_ids,matched_distance,matched_metadata)):\n",
+        "    print(f\"Rank {rank} | ID: {doc_id} | Distance: {dist:.4f}\")\n",
+        "    print(f\" Subject: {meta['subject']} | Topic: {meta['topic']}\")\n",
+        "    print(f\" Document: {doc}\")\n",
+        "    print()\n",
+        "print(\"NOTICE: The result are about ETL and Pandas - exactly what 'clean and prepare data' means!\")\n",
+        "print(\"Sematic search found them even though the words are different.\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "filtered_query = \"How do computers learn from examples?\"\n",
+        "filtered_results = collection.query(\n",
+        "    query_texts=[filtered_query],\n",
+        "    n_results=3,\n",
+        "    where={\"Subject\":\"Machine Learning\"}\n",
+        ")\n",
+        "print(f\"FILTERED QUERY: '{filtered_query}'\")\n",
+        "print(\"Filter: Only Machine Learning documents\")\n",
+        "print(\"-\" * 60)\n",
+        "for rank, (doc,dist,meta) in enumerate(zip(\n",
+        "    filtered_results['documents'][0],\n",
+        "    filtered_results['documents'][0],\n",
+        "    filtered_results['metadatas'][0]\n",
+        "),start=1):\n",
+        "    #print(f\"Rank {rank}| Disrance:{dist:.4f} | Subject: {meta['subject']}\")\n",
+        "    #print(f\" {doc}\")\n",
+        "    print()\n",
+        "print(\"Notice: Only ML documents appear, even though ETL and Pandas might be 'related'.\")"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "wD-fGaP9haY5",
+        "outputId": "c1de5caa-aeab-4e8c-fa0f-7835fb6cf7ec"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "FILTERED QUERY: 'How do computers learn from examples?'\n",
+            "Filter: Only Machine Learning documents\n",
+            "------------------------------------------------------------\n",
+            "Notice: Only ML documents appear, even though ETL and Pandas might be 'related'.\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "print(\"DISTANCE TO SIMILARITY CONVERSATION\")\n",
+        "print(\"=\" * 50)\n",
+        "print(f\"{'Distance':<15}{'Similarity':<15}{'Interpretation':<20}\")\n",
+        "print('-' * 50)\n",
+        "distances = [0.05,0.20,0.40,0.65,0.90]\n",
+        "interpretations = [\"Near identical\", \"Very Similar\", \"Related\", \"Somewhat related\", \"Not related\"]\n",
+        "\n",
+        "for dist, interp in zip(distances, interpretations):\n",
+        "  similarity = 1-dist\n",
+        "  print(f\"{dist:<15.2f}{similarity:<15.2f}{interp:<20}\")"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "r4eE1mgKk5bd",
+        "outputId": "65d5b986-cda6-4087-dc40-93e3b974e487"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "DISTANCE TO SIMILARITY CONVERSATION\n",
+            "==================================================\n",
+            "Distance       Similarity     Interpretation      \n",
+            "--------------------------------------------------\n",
+            "0.05           0.95           Near identical      \n",
+            "0.20           0.80           Very Similar        \n",
+            "0.40           0.60           Related             \n",
+            "0.65           0.35           Somewhat related    \n",
+            "0.90           0.10           Not related         \n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "notes_df = pd.read_csv('college_notes.csv')\n",
+        "print(f\"Shape:{notes_df.shape}\")\n",
+        "print(f\"Columns: {list(notes_df.columns)}\")"
+      ],
+      "metadata": {
+        "id": "lfoSqSstmMJf",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "a77bd72e-a856-4469-8298-7e1b3e87b501"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Shape:(15, 4)\n",
+            "Columns: ['note_id', 'subject', 'topic', 'content']\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "notes_df.head()"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 206
+        },
+        "id": "bX3Gd-z-r_L4",
+        "outputId": "5138fa5f-f8c1-4499-d7df-dbbf04e50267"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "  note_id           subject                     topic  \\\n",
+              "0    N001  Data Engineering             ETL Pipelines   \n",
+              "1    N002  Data Engineering             SQL Databases   \n",
+              "2    N003  Data Engineering             Data Cleaning   \n",
+              "3    N004  Data Engineering  APIs and Data Collection   \n",
+              "4    N005  Data Engineering      Big Data and PySpark   \n",
+              "\n",
+              "                                             content  \n",
+              "0  ETL stands for Extract Transform Load. It is t...  \n",
+              "1  A database is an organized collection of data ...  \n",
+              "2  Data cleaning involves fixing or removing inco...  \n",
+              "3  An API or Application Programming Interface al...  \n",
+              "4  Big Data refers to extremely large datasets th...  "
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-0571f48b-8e37-4274-bcb2-307c09c03170\" class=\"colab-df-container\">\n",
+              "    <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>note_id</th>\n",
+              "      <th>subject</th>\n",
+              "      <th>topic</th>\n",
+              "      <th>content</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>N001</td>\n",
+              "      <td>Data Engineering</td>\n",
+              "      <td>ETL Pipelines</td>\n",
+              "      <td>ETL stands for Extract Transform Load. It is t...</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>N002</td>\n",
+              "      <td>Data Engineering</td>\n",
+              "      <td>SQL Databases</td>\n",
+              "      <td>A database is an organized collection of data ...</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>N003</td>\n",
+              "      <td>Data Engineering</td>\n",
+              "      <td>Data Cleaning</td>\n",
+              "      <td>Data cleaning involves fixing or removing inco...</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>N004</td>\n",
+              "      <td>Data Engineering</td>\n",
+              "      <td>APIs and Data Collection</td>\n",
+              "      <td>An API or Application Programming Interface al...</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>N005</td>\n",
+              "      <td>Data Engineering</td>\n",
+              "      <td>Big Data and PySpark</td>\n",
+              "      <td>Big Data refers to extremely large datasets th...</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "    <div class=\"colab-df-buttons\">\n",
+              "\n",
+              "  <div class=\"colab-df-container\">\n",
+              "    <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-0571f48b-8e37-4274-bcb2-307c09c03170')\"\n",
+              "            title=\"Convert this dataframe to an interactive table.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\" viewBox=\"0 -960 960 960\">\n",
+              "    <path d=\"M120-120v-720h720v720H120Zm60-500h600v-160H180v160Zm220 220h160v-160H400v160Zm0 220h160v-160H400v160ZM180-400h160v-160H180v160Zm440 0h160v-160H620v160ZM180-180h160v-160H180v160Zm440 0h160v-160H620v160Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "\n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-buttons div {\n",
+              "      margin-bottom: 4px;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "    <script>\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#df-0571f48b-8e37-4274-bcb2-307c09c03170 button.colab-df-convert');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      async function convertToInteractive(key) {\n",
+              "        const element = document.querySelector('#df-0571f48b-8e37-4274-bcb2-307c09c03170');\n",
+              "        const dataTable =\n",
+              "          await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                    [key], {});\n",
+              "        if (!dataTable) return;\n",
+              "\n",
+              "        const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "          '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "          + ' to learn more about interactive tables.';\n",
+              "        element.innerHTML = '';\n",
+              "        dataTable['output_type'] = 'display_data';\n",
+              "        await google.colab.output.renderOutput(dataTable, element);\n",
+              "        const docLink = document.createElement('div');\n",
+              "        docLink.innerHTML = docLinkHtml;\n",
+              "        element.appendChild(docLink);\n",
+              "      }\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "\n",
+              "    </div>\n",
+              "  </div>\n"
+            ],
+            "application/vnd.google.colaboratory.intrinsic+json": {
+              "type": "dataframe",
+              "variable_name": "notes_df",
+              "summary": "{\n  \"name\": \"notes_df\",\n  \"rows\": 15,\n  \"fields\": [\n    {\n      \"column\": \"note_id\",\n      \"properties\": {\n        \"dtype\": \"string\",\n        \"num_unique_values\": 15,\n        \"samples\": [\n          \"N010\",\n          \"N012\",\n          \"N001\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"subject\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 4,\n        \"samples\": [\n          \"Machine Learning\",\n          \"Python Programming\",\n          \"Data Engineering\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"topic\",\n      \"properties\": {\n        \"dtype\": \"string\",\n        \"num_unique_values\": 15,\n        \"samples\": [\n          \"Random Forest\",\n          \"Prompt Engineering\",\n          \"ETL Pipelines\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"content\",\n      \"properties\": {\n        \"dtype\": \"string\",\n        \"num_unique_values\": 15,\n        \"samples\": [\n          \"Random Forest is an ensemble learning method that builds multiple decision trees and combines their predictions. It is more accurate and robust than a single decision tree and handles overfitting well by averaging results from many trees.\",\n          \"Prompt engineering is the practice of designing effective instructions or inputs for AI language models. A good prompt gives the model clear context specific instructions and examples if needed. Techniques include zero-shot few-shot role-based and chain-of-thought prompting.\",\n          \"ETL stands for Extract Transform Load. It is the process of collecting raw data from different sources transforming it into a clean and structured format and loading it into a database or data warehouse for analysis.\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "metadata": {},
+          "execution_count": 43
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "print(\"Notes per subject\")\n",
+        "print(notes_df['subject'].value_counts())"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "Ge93BM1ZsD7C",
+        "outputId": "11d1bde1-5f9e-4b2b-f5d2-3c62e8fda1f3"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Notes per subject\n",
+            "subject\n",
+            "Data Engineering      5\n",
+            "Machine Learning      5\n",
+            "Generative AI         3\n",
+            "Python Programming    2\n",
+            "Name: count, dtype: int64\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "first_note = notes_df.iloc[0]\n",
+        "print(f\"Note_ID: {first_note['note_id']}\")\n",
+        "print(f\"Subject:{}\")"
+      ],
+      "metadata": {
+        "id": "qmJm258vsTRn"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "print(f\"Documents prepared: {len(all_documents)}\")\n"
+      ],
+      "metadata": {
+        "id": "ehWTRDmCuk7k"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "q1)"
+      ],
+      "metadata": {
+        "id": "kW1HXx13yC9c"
+      }
+    }
+  ],
+  "metadata": {
+    "colab": {
+      "provenance": []
+    },
+    "kernelspec": {
+      "display_name": "Python 3",
+      "name": "python3"
+    },
+    "language_info": {
+      "name": "python"
+    },
+    "widgets": {
+      "application/vnd.jupyter.widget-state+json": {
+        "d5fb449fecdf4a6dac16b9d81d512ac7": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HBoxModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HBoxModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HBoxView",
+            "box_style": "",
+            "children": [
+              "IPY_MODEL_d4ed2b9243e742b48e8ec7b4a2262cae",
+              "IPY_MODEL_2f27cc21927144328c7deacdba1c46d4",
+              "IPY_MODEL_c4dc723820ed41c7af85333548d2f315"
+            ],
+            "layout": "IPY_MODEL_34707060b53244d099564e69a9d3d2ed"
+          }
+        },
+        "d4ed2b9243e742b48e8ec7b4a2262cae": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HTMLModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HTMLModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HTMLView",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_01d8c37964c34ea7b8a009475d923220",
+            "placeholder": "​",
+            "style": "IPY_MODEL_346c4cc3d8ec40ee92836908fe3def97",
+            "value": "Loading weights: 100%"
+          }
+        },
+        "2f27cc21927144328c7deacdba1c46d4": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "FloatProgressModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "FloatProgressModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "ProgressView",
+            "bar_style": "success",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_5fcf39de61f54c93a5bb43b4d1f0209c",
+            "max": 103,
+            "min": 0,
+            "orientation": "horizontal",
+            "style": "IPY_MODEL_2138b19ae1d549409965ae6e55a93d92",
+            "value": 103
+          }
+        },
+        "c4dc723820ed41c7af85333548d2f315": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HTMLModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HTMLModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HTMLView",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_528ae5488362421d938db18188306f9d",
+            "placeholder": "​",
+            "style": "IPY_MODEL_0d02723ce256447eb5a1d86be9f03953",
+            "value": " 103/103 [00:00&lt;00:00, 433.57it/s, Materializing param=pooler.dense.weight]"
+          }
+        },
+        "34707060b53244d099564e69a9d3d2ed": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "01d8c37964c34ea7b8a009475d923220": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "346c4cc3d8ec40ee92836908fe3def97": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "DescriptionStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "DescriptionStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "description_width": ""
+          }
+        },
+        "5fcf39de61f54c93a5bb43b4d1f0209c": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "2138b19ae1d549409965ae6e55a93d92": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "ProgressStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "ProgressStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "bar_color": null,
+            "description_width": ""
+          }
+        },
+        "528ae5488362421d938db18188306f9d": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "0d02723ce256447eb5a1d86be9f03953": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "DescriptionStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "DescriptionStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "description_width": ""
+          }
+        }
+      }
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 0
+}
